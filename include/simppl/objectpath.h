@@ -70,12 +70,6 @@ struct ObjectPath
         return !(lhs < rhs);
     }
 
-    inline
-    bool operator!=(const ObjectPath& rhs) const
-    {
-        return path != rhs.path;
-    }
-
     std::string path;
 };
 
