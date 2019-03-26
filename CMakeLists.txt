@@ -21,6 +21,7 @@ set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG}   -Wall -pedantic -std=c++
 
 # enable introspection by default
 OPTION(HAVE_INTROSPECTION "Have introspection" ON)
+OPTION(HAVE_OBJECT_MANAGER "Implement FreeDesktop ObjectManager interface" ON)
 
 if(HAVE_INTROSPECTION)
    add_definitions(-DSIMPPL_HAVE_INTROSPECTION=1)
@@ -28,6 +29,11 @@ else()
    add_definitions(-DSIMPPL_HAVE_INTROSPECTION=0)
 endif()
 
+if(HAVE_OBJECT_MANAGER)
+    add_definitions(-DSIMPPL_HAVE_OBJECT_MANAGER=1)
+else()
+    add_definitions(-DSIMPPL_HAVE_OBJECT_MANAGER=0)
+endif()
 
 include_directories(include)
 

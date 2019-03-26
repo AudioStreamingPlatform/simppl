@@ -193,7 +193,14 @@ DBusHandlerResult SkeletonBase::handle_request(DBusMessage* msg)
     const char* method_name = dbus_message_get_member(msg);
     const char* interface_name = dbus_message_get_interface(msg);
 
-#ifdef SIMPPL_HAVE_INTROSPECTION
+#if SIMPPL_HAVE_OBJECT_MANAGER
+    if (!strcmp(interface_name, "org.freedesktop.DBus.ObjectManager"))
+    {
+        return handle_object_manager_request(msg);
+    }
+#endif
+
+#if SIMPPL_HAVE_INTROSPECTION
     if (!strcmp(interface_name, "org.freedesktop.DBus.Introspectable"))
     {
         return handle_introspect_request(msg);
@@ -221,7 +228,7 @@ DBusHandlerResult SkeletonBase::handle_request(DBusMessage* msg)
 }
 
 
-#ifdef SIMPPL_HAVE_INTROSPECTION
+#if SIMPPL_HAVE_INTROSPECTION
 DBusHandlerResult SkeletonBase::handle_introspect_request(DBusMessage* msg)
 {
     const char* method = dbus_message_get_member(msg);
@@ -238,6 +245,25 @@ DBusHandlerResult SkeletonBase::handle_introspect_request(DBusMessage* msg)
     {
         introspect_interface(oss, i);
     }
+
+#if SIMPPL_HAVE_OBJECT_MANAGER
+    if (children_.size() > 0)
+    {
+        oss << "  <interface name=\"org.freedesktop.DBus.ObjectManager\">\n"
+               "    <method name=\"GetManagedObjects\">\n"
+               "      <arg name=\"objects\" type=\"a{oa{sa{sv}}}\" direction=\"out\"/>\n"
+               "    </method>\n"
+               "    <signal name=\"InterfacesAdded\">\n"
+               "      <arg name=\"object\" type=\"o\"/>\n"
+               "      <arg name=\"interfaces\" type=\"a{sa{sv}}\"/>\n"
+               "    </signal>\n"
+               "    <signal name=\"InterfacesRemoved\">\n"
+               "      <arg name=\"object\" type=\"o\"/>\n"
+               "      <arg name=\"interfaces\" type=\"as\"/>\n"
+               "    </signal>\n"
+               "  </interface>\n";
+    }
+#endif
 
     // introspectable
     oss << "  <interface name=\"org.freedesktop.DBus.Introspectable\">\n"
@@ -268,19 +294,150 @@ DBusHandlerResult SkeletonBase::handle_introspect_request(DBusMessage* msg)
                "  </interface>\n";
     }
 
+#if SIMPPL_HAVE_OBJECT_MANAGER
+    introspect_children(oss);
+#endif
+
     oss << "</node>\n";
 
-    DBusMessage* reply = dbus_message_new_method_return(msg);
+    message_ptr_t reply = make_message(dbus_message_new_method_return(msg));
 
     DBusMessageIter iter;
-    dbus_message_iter_init_append(reply, &iter);
+    dbus_message_iter_init_append(reply.get(), &iter);
 
     encode(iter, oss.str());
 
-    dbus_connection_send(disp_->conn_, reply, nullptr);
+    dbus_connection_send(disp_->conn_, reply.get(), nullptr);
     return DBUS_HANDLER_RESULT_HANDLED;
 }
-#endif  // defined(SIMPPL_HAVE_INTROSPECTION)
+
+
+#if SIMPPL_HAVE_OBJECT_MANAGER
+void SkeletonBase::introspect_children(std::ostream& os) const
+{
+    for (auto child : children_)
+    {
+        os << "  <node name=\"" << child->objectpath() << "\"/>\n";
+    }
+}
+#endif   // SIMPPL_HAVE_OBJECT_MANAGER
+#endif  // SIMPPL_HAVE_INTROSPECTION
+
+
+#if SIMPPL_HAVE_OBJECT_MANAGER
+DBusHandlerResult SkeletonBase::handle_object_manager_request(DBusMessage* msg)
+{
+    const char* method = dbus_message_get_member(msg);
+    if (strcmp(method, "GetManagedObjects") != 0)
+        return handle_error(msg, DBUS_ERROR_UNKNOWN_METHOD);
+
+    message_ptr_t reply = make_message(dbus_message_new_method_return(msg));
+
+    DBusMessageIter root;
+    dbus_message_iter_init_append(reply.get(), &root);
+
+    dump_children(root);
+
+    dbus_connection_send(disp_->conn_, reply.get(), nullptr);
+    return DBUS_HANDLER_RESULT_HANDLED;
+}
+
+
+void SkeletonBase::dump_children(DBusMessageIter& root) const
+{
+    DBusMessageIter object_map;
+    dbus_message_iter_open_container(&root, DBUS_TYPE_ARRAY, "{oa{sa{sv}}}", &object_map);
+
+    for (auto child : children_)
+    {
+        child->dump(object_map);
+    }
+
+    dbus_message_iter_close_container(&root, &object_map);
+}
+
+
+void SkeletonBase::dump(DBusMessageIter& object_map) const
+{
+    DBusMessageIter item;
+    dbus_message_iter_open_container(&object_map, DBUS_TYPE_DICT_ENTRY, nullptr, &item);
+    encode(item, objectpath_);
+    dump_interface_list(item);
+    dbus_message_iter_close_container(&object_map, &item);
+}
+
+
+void SkeletonBase::dump_interface_list(DBusMessageIter& item) const
+{
+    DBusMessageIter interface_map;
+    dbus_message_iter_open_container(&item, DBUS_TYPE_ARRAY, "{sa{sv}}", &interface_map);
+
+#if SIMPPL_HAVE_INTROSPECTION
+    dump_empty_interface(interface_map, "org.freedesktop.DBus.Introspectable");
+#endif
+    if (has_any_properties())
+        dump_empty_interface(interface_map, "org.freedesktop.DBus.Properties");
+
+    for (size_type iface_id = 0; iface_id < property_heads_.size(); ++iface_id)
+    {
+        dump_interface(interface_map, iface_id);
+    }
+
+    dbus_message_iter_close_container(&item, &interface_map);
+}
+
+
+void SkeletonBase::dump_interface(DBusMessageIter& interface_map, size_type iface_id) const
+{
+    DBusMessageIter item;
+    dbus_message_iter_open_container(&interface_map, DBUS_TYPE_DICT_ENTRY, nullptr, &item);
+
+    const char* iface_name = iface(iface_id).c_str();
+    dbus_message_iter_append_basic(&item, DBUS_TYPE_STRING, &iface_name);
+
+    dump_property_list(item, property_heads_[iface_id]);
+
+    dbus_message_iter_close_container(&interface_map, &item);
+}
+
+
+void SkeletonBase::dump_empty_interface(DBusMessageIter& interface_map, const char* name)
+{
+    DBusMessageIter item;
+    dbus_message_iter_open_container(&interface_map, DBUS_TYPE_DICT_ENTRY, nullptr, &item);
+    encode(item, name);
+
+    DBusMessageIter property_map;
+    dbus_message_iter_open_container(&item, DBUS_TYPE_ARRAY, "{sv}", &property_map);
+    dbus_message_iter_close_container(&item, &property_map);
+
+    dbus_message_iter_close_container(&interface_map, &item);
+    }
+#endif
+
+
+void SkeletonBase::dump_property(DBusMessageIter& property_map, ServerPropertyBase& property)
+{
+    DBusMessageIter item;
+    dbus_message_iter_open_container(&property_map, DBUS_TYPE_DICT_ENTRY, nullptr, &item);
+    dbus_message_iter_append_basic(&item, DBUS_TYPE_STRING, &property.name_);
+    property.eval(item);
+    dbus_message_iter_close_container(&property_map, &item);
+}
+
+
+void SkeletonBase::dump_property_list(DBusMessageIter& item, ServerPropertyBase* head) const
+{
+    DBusMessageIter property_map;
+    dbus_message_iter_open_container(&item, DBUS_TYPE_ARRAY, "{sv}", &property_map);
+
+    for (auto pp = head; pp; pp = pp->next_)
+    {
+        dump_property(property_map, *pp);
+    }
+
+    dbus_message_iter_close_container(&item, &property_map);
+}
 
 
 DBusHandlerResult SkeletonBase::handle_property_request(DBusMessage* msg)
@@ -401,7 +558,7 @@ DBusHandlerResult SkeletonBase::handle_error(DBusMessage* msg, const char* dbus_
 #if SIMPPL_HAVE_INTROSPECTION
 void SkeletonBase::introspect_interface(std::ostream& os, size_type index) const
 {
-    os << "  <interface name=\""<< iface(index) << "\">\n";
+    os << "  <interface name=\""<< iface(index).c_str() << "\">\n";
 
     for (auto pm = method_heads_[index]; pm; pm = pm->next_)
     {

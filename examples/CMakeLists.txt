@@ -14,3 +14,8 @@ add_executable(mixed
 )
 
 target_link_libraries(mixed simppl)
+
+if(HAVE_OBJECT_MANAGER)
+    add_executable(object_manager object_manager/object_manager.cpp)
+    target_link_libraries(object_manager simppl)
+endif()

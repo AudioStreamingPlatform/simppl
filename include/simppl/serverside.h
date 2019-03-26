@@ -195,14 +195,21 @@ private:
 
 struct ServerPropertyBase
 {
-   typedef void (*eval_type)(ServerPropertyBase*, DBusMessage*);
+   typedef void (*eval_type)(ServerPropertyBase*, DBusMessageIter&);
    typedef void (*eval_set_type)(ServerPropertyBase*, DBusMessageIter&);
 
    ServerPropertyBase(const char* name, SkeletonBase* iface, int iface_id);
 
    void eval(DBusMessage* msg)
    {
-      eval_(this, msg);
+      DBusMessageIter iter;
+      dbus_message_iter_init_append(msg, &iter);
+      eval(iter);
+   }
+
+   void eval(DBusMessageIter& iter)
+   {
+      eval_(this, iter);
    }
 
    void evalSet(DBusMessageIter& iter)
@@ -248,11 +255,8 @@ struct BaseProperty : ServerPropertyBase
    }
 
    static
-   void __eval(ServerPropertyBase* obj, DBusMessage* response)
+   void __eval(ServerPropertyBase* obj, DBusMessageIter& iter)
    {
-       DBusMessageIter iter;
-       dbus_message_iter_init_append(response, &iter);
-
        auto that = ((BaseProperty*)obj);
        detail::PropertyCodec<DataT>::encode(iter, that->t_.template get<cb_type>() ? (*that->t_.template get<cb_type>())() : *that->t_.template get<DataT>());
    }

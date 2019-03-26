@@ -7,6 +7,7 @@
 #include <dbus/dbus.h>
 
 #include "simppl/error.h"
+#include "simppl/objectpath.h"
 #include "simppl/serverrequestdescriptor.h"
 
 #include "simppl/detail/serverresponseholder.h"
@@ -72,7 +73,7 @@ struct SkeletonBase
     inline
     const char* objectpath() const
     {
-        return objectpath_.c_str();
+        return objectpath_.path.c_str();
     }
 
     inline
@@ -84,6 +85,18 @@ struct SkeletonBase
     void send_property_change(const char* prop, int iface_id, std::function<void(DBusMessageIter&)>&& f);
     void send_signal(const char* signame, int iface_id, std::function<void(DBusMessageIter&)>&& f);
 
+#if SIMPPL_HAVE_OBJECT_MANAGER
+    size_type child_count()
+    {
+        return children_.size();
+    }
+
+    void add_child(SkeletonBase& child)
+    {
+        children_.push_back(&child);
+    }
+#endif
+
 protected:
     static constexpr int invalid_iface_id = -1;
 
@@ -92,16 +105,32 @@ protected:
     void init(std::string busname, std::string objectpath);
 
     DBusHandlerResult handle_request(DBusMessage* msg);
-#ifdef SIMPPL_HAVE_INTROSPECTION
-    DBusHandlerResult handle_introspect_request(DBusMessage* msg);
-#endif
     DBusHandlerResult handle_property_request(DBusMessage* msg);
     DBusHandlerResult handle_property_get_request(DBusMessage* msg, ServerPropertyBase& property);
     DBusHandlerResult handle_property_set_request(DBusMessage* msg, ServerPropertyBase& property, DBusMessageIter& iter);
     DBusHandlerResult handle_interface_request(DBusMessage* msg, ServerMethodBase& method);
     DBusHandlerResult handle_error(DBusMessage* msg, const char* dbus_error);
 
+#if SIMPPL_HAVE_INTROSPECTION
+    DBusHandlerResult handle_introspect_request(DBusMessage* msg);
     void introspect_interface(std::ostream& os, size_type index) const;
+#if SIMPPL_HAVE_OBJECT_MANAGER
+    void introspect_children(std::ostream& os) const;
+#endif
+#endif
+
+#if SIMPPL_HAVE_OBJECT_MANAGER
+    DBusHandlerResult handle_object_manager_request(DBusMessage* msg);
+    void dump_children(DBusMessageIter& root) const;
+    void dump(DBusMessageIter& object_map) const;
+    void dump_interface_list(DBusMessageIter& item) const;
+    void dump_interface(DBusMessageIter& interface_map, size_type iface_id) const;
+    static void dump_empty_interface(DBusMessageIter& interface_map, const char* name);
+#endif
+
+    void dump_property_list(DBusMessageIter& item, ServerPropertyBase* head) const;
+    static void dump_property(DBusMessageIter& property_map, ServerPropertyBase& property);
+
     bool has_any_properties() const;
     ServerPropertyBase* find_property(int iface_id, const char* name) const;
     ServerMethodBase* find_method(int iface_id, const char* name) const;
@@ -130,7 +159,7 @@ protected:
 
     std::vector<std::string> ifaces_;
     std::string busname_;
-    std::string objectpath_;
+    ObjectPath objectpath_;
 
     Dispatcher* disp_;
     ServerRequestDescriptor current_request_;
@@ -141,6 +170,10 @@ protected:
 
 #if SIMPPL_HAVE_INTROSPECTION
     std::vector<ServerSignalBase*> signal_heads_;
+#endif
+
+#if SIMPPL_HAVE_OBJECT_MANAGER
+    std::vector<SkeletonBase*> children_;
 #endif
 };
 
