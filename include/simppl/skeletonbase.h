@@ -89,6 +89,7 @@ protected:
 
     void init(const char* mangled_iface_list, const char* role);
     void init(size_type iface_count, const char* mangled_iface_list, std::string busname, std::string objectpath);
+    void init(std::string busname, std::string objectpath);
 
     DBusHandlerResult handle_request(DBusMessage* msg);
 #ifdef SIMPPL_HAVE_INTROSPECTION

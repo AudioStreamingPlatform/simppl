@@ -56,6 +56,23 @@ protected:
     ServerRequestDescriptor current_request_;
 };
 
+
+template<>
+struct Skeleton<> : detail::SizedSkeletonBase<0>
+{
+    static constexpr std::size_t iface_count = 0;
+
+    Skeleton(Dispatcher& disp, std::string busname, std::string objectpath)
+    {
+        this->init(std::move(busname), std::move(objectpath));
+        dispatcher_add_skeleton(disp, *this);
+    }
+
+protected:
+    ServerRequestDescriptor current_request_;
+};
+
+
 }   // namespace dbus
 
 }   // namespace simppl

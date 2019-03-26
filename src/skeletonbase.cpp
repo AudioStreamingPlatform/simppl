@@ -89,6 +89,16 @@ void SkeletonBase::init(size_type iface_count, const char* mangled_iface_list, s
 }
 
 
+void SkeletonBase::init(std::string busname, std::string objectpath)
+{
+    assert(busname.length() > 0);
+    assert(objectpath.length() > 0);
+
+    busname_ = std::move(busname);
+    objectpath_ = std::move(objectpath);
+}
+
+
 Dispatcher& SkeletonBase::disp()
 {
    assert(disp_);
