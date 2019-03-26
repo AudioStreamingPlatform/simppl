@@ -107,6 +107,7 @@ protected:
     DBusHandlerResult handle_request(DBusMessage* msg);
     DBusHandlerResult handle_property_request(DBusMessage* msg);
     DBusHandlerResult handle_property_get_request(DBusMessage* msg, ServerPropertyBase& property);
+    DBusHandlerResult handle_property_getall_request(DBusMessage* msg, size_type iface_id);
     DBusHandlerResult handle_property_set_request(DBusMessage* msg, ServerPropertyBase& property, DBusMessageIter& iter);
     DBusHandlerResult handle_interface_request(DBusMessage* msg, ServerMethodBase& method);
     DBusHandlerResult handle_error(DBusMessage* msg, const char* dbus_error);

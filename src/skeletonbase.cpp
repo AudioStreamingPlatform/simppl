@@ -281,6 +281,10 @@ DBusHandlerResult SkeletonBase::handle_introspect_request(DBusMessage* msg)
                "      <arg name=\"property_name\" type=\"s\" direction=\"in\"/>\n"
                "      <arg name=\"value\" type=\"v\" direction=\"out\"/>\n"
                "    </method>\n"
+               "    <method name=\"GetAll\">\n"
+               "      <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"
+               "      <arg name=\"value\" type=\"a{sv}\" direction=\"out\"/>\n"
+               "    </method>\n"
                "    <method name=\"Set\">\n"
                "      <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"
                "      <arg name=\"property_name\" type=\"s\" direction=\"in\"/>\n"
@@ -412,7 +416,7 @@ void SkeletonBase::dump_empty_interface(DBusMessageIter& interface_map, const ch
     dbus_message_iter_close_container(&item, &property_map);
 
     dbus_message_iter_close_container(&interface_map, &item);
-    }
+}
 #endif
 
 
@@ -444,14 +448,13 @@ DBusHandlerResult SkeletonBase::handle_property_request(DBusMessage* msg)
 {
     DBusMessageIter iter;
     std::string interface_name;
-    std::string property_name;
 
     try
     {
         dbus_message_iter_init(msg, &iter);
-        decode(iter, interface_name, property_name);
+        decode(iter, interface_name);
     }
-    catch(DecoderError&)
+    catch (const DecoderError&)
     {
         return handle_error(msg, DBUS_ERROR_INVALID_ARGS);
     }
@@ -462,25 +465,53 @@ DBusHandlerResult SkeletonBase::handle_property_request(DBusMessage* msg)
         return handle_error(msg, DBUS_ERROR_UNKNOWN_INTERFACE);
     }
 
-    ServerPropertyBase* property = find_property(iface_id, property_name);
-    if (!property)
-    {
-        return handle_error(msg, DBUS_ERROR_UNKNOWN_PROPERTY);
-    }
-
     const char* method = dbus_message_get_member(msg);
-    if (!strcmp(method, "Get"))
+    if (!strcmp(method, "GetAll"))
     {
-        return handle_property_get_request(msg, *property);
-    }
-    else if(!strcmp(method, "Set"))
-    {
-        return handle_property_set_request(msg, *property, iter);
+        return handle_property_getall_request(msg, iface_id);
     }
     else
     {
-        return handle_error(msg, DBUS_ERROR_UNKNOWN_METHOD);
+        std::string property_name;
+        try
+        {
+            decode(iter, property_name);
+        }
+        catch (const DecoderError&)
+        {
+            return handle_error(msg, DBUS_ERROR_INVALID_ARGS);
+        }
+
+        ServerPropertyBase* property = find_property(iface_id, property_name);
+        if (!property)
+        {
+            return handle_error(msg, DBUS_ERROR_UNKNOWN_PROPERTY);
+        }
+
+        if (!strcmp(method, "Get"))
+        {
+            return handle_property_get_request(msg, *property);
+        }
+        else if(!strcmp(method, "Set"))
+        {
+            return handle_property_set_request(msg, *property, iter);
+        }
+        else
+        {
+            return handle_error(msg, DBUS_ERROR_UNKNOWN_METHOD);
+        }
     }
+}
+
+
+DBusHandlerResult SkeletonBase::handle_property_getall_request(DBusMessage* msg, size_type iface_id)
+{
+    message_ptr_t reply = make_message(dbus_message_new_method_return(msg));
+    DBusMessageIter root;
+    dbus_message_iter_init_append(reply.get(), &root);
+    dump_property_list(root, property_heads_[iface_id]);
+    dbus_connection_send(disp_->conn_, reply.get(), nullptr);
+    return DBUS_HANDLER_RESULT_HANDLED;
 }
 
 
