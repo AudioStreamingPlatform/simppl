@@ -116,6 +116,7 @@ const char* find_next_interface(const char* s) {
       return nullptr;
    } else {
       assert(false && "expected ',' or '>'");
+      return nullptr;
    }
 }
 
