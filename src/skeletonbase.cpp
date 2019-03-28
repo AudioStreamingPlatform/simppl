@@ -319,9 +319,11 @@ DBusHandlerResult SkeletonBase::handle_introspect_request(DBusMessage* msg)
 #if SIMPPL_HAVE_OBJECT_MANAGER
 void SkeletonBase::introspect_children(std::ostream& os) const
 {
+    const auto parent_path_length = objectpath_.path.length();
     for (auto child : children_)
     {
-        os << "  <node name=\"" << child->objectpath() << "\"/>\n";
+        const char* relative_child_path = child->objectpath() + parent_path_length;
+        os << "  <node name=\"" << relative_child_path << "\"/>\n";
     }
 }
 #endif   // SIMPPL_HAVE_OBJECT_MANAGER
